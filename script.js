@@ -1,9 +1,9 @@
 /* ============================================================
    Watch Party - script.js
-   MKV support: browser-native playback is attempted first.
-   If the browser cannot play MKV, ffmpeg.wasm converts the remote
-   MKV to a browser-friendly MP4 locally in the browser.
+   قبل از استفاده، مقدار firebaseConfig پایین رو با اطلاعات
+   پروژه‌ی Firebase خودت جایگزین کن (توضیحات کامل در README.md)
    ============================================================ */
+
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyDLXAuoEF7oJki62MVAWmi6kqEl8yCQ_EE",
@@ -19,6 +19,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+/* ---------- ابزارهای عمومی ---------- */
+
 const screens = {
   landing: document.getElementById("landing"),
   setup: document.getElementById("setup"),
@@ -32,12 +34,15 @@ function showScreen(name) {
 }
 
 function getRoomIdFromUrl() {
-  return new URLSearchParams(window.location.search).get("room");
+  const params = new URLSearchParams(window.location.search);
+  return params.get("room");
 }
 
 function generateRoomId() {
   return Math.random().toString(36).substring(2, 9);
 }
+
+/* ---------- عناصر ---------- */
 
 const startBtn = document.getElementById("startBtn");
 const createRoomBtn = document.getElementById("createRoomBtn");
@@ -50,68 +55,30 @@ const videoPlayer = document.getElementById("videoPlayer");
 const statusText = document.getElementById("statusText");
 const unlockBtn = document.getElementById("unlockBtn");
 const subtitleFileInput = document.getElementById("subtitleFileInput");
-const convertMkvBtn = document.getElementById("convertMkvBtn");
-const conversionProgress = document.getElementById("conversionProgress");
 
 let currentRoomId = null;
-let roomRef = null;
-let roomValueHandler = null;
 let isRemoteChange = false;
 let hasLoadedVideoSrc = false;
 let lastSentTime = 0;
-let currentSourceUrl = null;
-let currentObjectUrl = null;
-let ffmpeg = null;
-let ffmpegLoaded = false;
-let conversionPromise = null;
-let roomData = null;
 
-function isMkvUrl(url) {
-  try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    return pathname.endsWith(".mkv");
-  } catch {
-    return /\.mkv(?:$|[?#])/i.test(url);
-  }
-}
+/* ---------- شروع: دکمه‌ی "بریم فیلم ببینیم" ---------- */
 
-function nativeVideoCanPlay(url) {
-  if (!isMkvUrl(url)) return true;
-  const probe = document.createElement("video");
-  // Most browsers report an empty string for MKV because it is not a
-  // reliably supported HTML5 container. Do not trust this as a guarantee.
-  return !!probe.canPlayType('video/x-matroska; codecs="avc1"');
-}
-
-function setStatus(text, type = "normal") {
-  statusText.textContent = text;
-  statusText.classList.remove("error", "success", "working");
-  if (type !== "normal") statusText.classList.add(type);
-}
-
-function setConversionUI(visible, disabled = false) {
-  if (!convertMkvBtn) return;
-  convertMkvBtn.style.display = visible ? "block" : "none";
-  convertMkvBtn.disabled = disabled;
-  if (conversionProgress) {
-    conversionProgress.style.display = visible ? "block" : "none";
-  }
-}
-
-/* ---------- Start ---------- */
 startBtn.addEventListener("click", () => {
   const roomIdInUrl = getRoomIdFromUrl();
   if (roomIdInUrl) {
+    // پارتنر لینک دعوت رو باز کرده -> مستقیم وارد پخش فیلم بشه
     currentRoomId = roomIdInUrl;
     showScreen("player");
     joinRoom(currentRoomId);
   } else {
+    // اولین نفر -> باید لینک فیلم رو وارد کنه
     showScreen("setup");
   }
 });
 
-/* ---------- Create room ---------- */
-createRoomBtn.addEventListener("click", async () => {
+/* ---------- ساخت Room ---------- */
+
+createRoomBtn.addEventListener("click", () => {
   const videoUrl = videoUrlInput.value.trim();
   if (!videoUrl) {
     alert("لطفاً لینک فیلم رو وارد کن 🎬");
@@ -121,8 +88,8 @@ createRoomBtn.addEventListener("click", async () => {
   currentRoomId = generateRoomId();
   const subtitleUrl = subtitleUrlInput.value.trim();
 
-  await db.ref("rooms/" + currentRoomId).set({
-    videoUrl,
+  db.ref("rooms/" + currentRoomId).set({
+    videoUrl: videoUrl,
     subtitleUrl: subtitleUrl || null,
     isPlaying: false,
     currentTime: 0,
@@ -139,7 +106,8 @@ createRoomBtn.addEventListener("click", async () => {
   showScreen("inviteBox");
 });
 
-/* ---------- Copy invite ---------- */
+/* ---------- کپی لینک دعوت ---------- */
+
 copyBtn.addEventListener("click", () => {
   inviteLinkInput.select();
   inviteLinkInput.setSelectionRange(0, 99999);
@@ -149,20 +117,26 @@ copyBtn.addEventListener("click", () => {
       copyBtn.textContent = "کپی شد ✅";
       setTimeout(() => (copyBtn.textContent = "کپی 📋"), 2000);
     })
-    .catch(() => document.execCommand("copy"));
+    .catch(() => {
+      // fallback برای مرورگرهای قدیمی
+      document.execCommand("copy");
+    });
 });
+
+/* ---------- ورود سازنده‌ی روم به صفحه‌ی پخش ---------- */
 
 goToPlayerBtn.addEventListener("click", () => {
   showScreen("player");
   joinRoom(currentRoomId);
 });
 
-/* ---------- Subtitles ---------- */
+/* ---------- زیرنویس ---------- */
+
 function srtToVtt(srtText) {
   const cleaned = srtText.replace(/\r+/g, "");
   const body = cleaned
-    .replace(/^\d+\s*\n(?=\d{2}:\d{2}:\d{2})/gm, "")
-    .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+    .replace(/^\d+\s*\n(?=\d{2}:\d{2}:\d{2})/gm, "") // حذف شماره‌ی ترتیب خط‌ها
+    .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2"); // تبدیل کاما به نقطه در زمان
   return "WEBVTT\n\n" + body;
 }
 
@@ -179,7 +153,9 @@ function setSubtitleTrack(url) {
   videoPlayer.appendChild(track);
 
   setTimeout(() => {
-    if (videoPlayer.textTracks[0]) videoPlayer.textTracks[0].mode = "showing";
+    if (videoPlayer.textTracks[0]) {
+      videoPlayer.textTracks[0].mode = "showing";
+    }
   }, 200);
 }
 
@@ -196,269 +172,115 @@ subtitleFileInput.addEventListener("change", (e) => {
       text = "WEBVTT\n\n" + text;
     }
     const blob = new Blob([text], { type: "text/vtt" });
-    setSubtitleTrack(URL.createObjectURL(blob));
+    const url = URL.createObjectURL(blob);
+    setSubtitleTrack(url);
   };
   reader.readAsText(file);
 });
 
-/* ---------- Autoplay unlock ---------- */
-unlockBtn.addEventListener("click", async () => {
+/* ---------- باز کردن قفل Autoplay با یک کلیک واقعی کاربر ---------- */
+
+unlockBtn.addEventListener("click", () => {
   videoPlayer.style.display = "block";
   unlockBtn.style.display = "none";
 
-  try {
-    await videoPlayer.play();
-    videoPlayer.pause();
-    if (roomData && roomData.isPlaying) {
-      await videoPlayer.play();
-    }
-  } catch {
-    // A real user gesture was still received; future remote play can retry.
-  }
+  videoPlayer
+    .play()
+    .then(() => {
+      // اگر هنوز طبق وضعیت فعلی روم قرار نیست پخش بشه، متوقفش کن
+      videoPlayer.pause();
+    })
+    .catch(() => {
+      // مهم نیست؛ همین کلیک برای باز شدن قفل مرورگر کافیه
+    });
 });
 
-/* ---------- MKV / ffmpeg.wasm ---------- */
-async function loadFfmpeg() {
-  if (ffmpegLoaded) return ffmpeg;
-  if (typeof FFmpegClass === "undefined" || typeof FFmpegUtil === "undefined") {
-    throw new Error("کتابخانه MKV/FFmpeg بارگذاری نشد. اینترنت یا CDN را بررسی کن.");
-  }
+/* ---------- پیوستن به یک Room و همگام‌سازی ---------- */
 
-  setStatus("در حال آماده‌سازی پشتیبانی MKV… حدود ۳۱ مگابایت دانلود می‌شود", "working");
-
-  ffmpeg = new FFmpegClass();
-  ffmpeg.on("log", ({ message }) => {
-    if (/error|invalid|failed/i.test(message)) console.warn("ffmpeg:", message);
-  });
-  ffmpeg.on("progress", ({ progress }) => {
-    if (conversionProgress) {
-      conversionProgress.value = Math.max(0, Math.min(1, progress || 0));
-    }
-    if (progress > 0) {
-      setStatus(`در حال تبدیل MKV به MP4… ${Math.round(progress * 100)}٪`, "working");
-    }
-  });
-
-  const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd";
-  await ffmpeg.load({
-    coreURL: await FFmpegUtil.toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-    wasmURL: await FFmpegUtil.toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-  });
-
-  ffmpegLoaded = true;
-  return ffmpeg;
-}
-
-async function convertMkvToMp4(url) {
-  if (conversionPromise) return conversionPromise;
-
-  conversionPromise = (async () => {
-    try {
-      setConversionUI(true, true);
-      if (conversionProgress) conversionProgress.value = 0;
-
-      const engine = await loadFfmpeg();
-
-      setStatus("در حال دانلود فیلم برای تبدیل… این مرحله ممکن است طول بکشد", "working");
-      let inputData;
-      try {
-        inputData = await FFmpegUtil.fetchFile(url);
-      } catch (err) {
-        throw new Error(
-          "مرورگر اجازه دانلود فایل MKV از این سرور را نداد. سرور فیلم باید CORS را برای سایت شما فعال کند."
-        );
-      }
-
-      // Use H.264/AAC because this combination is broadly supported by
-      // Android Chrome and iPhone Safari. Faststart lets playback begin sooner.
-      await engine.writeFile("input.mkv", inputData);
-      await engine.exec([
-        "-i", "input.mkv",
-        "-map", "0:v:0",
-        "-map", "0:a:0?",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        "output.mp4"
-      ]);
-
-      const output = await engine.readFile("output.mp4");
-      const blob = new Blob([output.buffer], { type: "video/mp4" });
-      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
-      currentObjectUrl = URL.createObjectURL(blob);
-
-      setConversionUI(false);
-      setStatus("MKV آماده شد؛ حالا فیلم را پخش کن ❤️", "success");
-      return currentObjectUrl;
-    } catch (err) {
-      console.error(err);
-      setConversionUI(true, false);
-      setStatus(
-        err?.message || "تبدیل MKV انجام نشد. لطفاً لینک مستقیم فایل و CORS را بررسی کن.",
-        "error"
-      );
-      throw err;
-    } finally {
-      conversionPromise = null;
-    }
-  })();
-
-  return conversionPromise;
-}
-
-convertMkvBtn?.addEventListener("click", async () => {
-  if (!currentSourceUrl) return;
-  try {
-    const convertedUrl = await convertMkvToMp4(currentSourceUrl);
-    videoPlayer.src = convertedUrl;
-    videoPlayer.load();
-    videoPlayer.style.display = "block";
-    unlockBtn.style.display = "block";
-  } catch {
-    // Error already shown to user.
-  }
-});
-
-async function prepareVideo(url) {
-  currentSourceUrl = url;
-
-  // For normal web formats, use the original URL directly.
-  if (!isMkvUrl(url)) {
-    videoPlayer.src = url;
-    videoPlayer.load();
-    videoPlayer.style.display = "block";
-    unlockBtn.style.display = "block";
-    setConversionUI(false);
-    return;
-  }
-
-  // Some browsers may support MKV natively. Try it first.
-  if (nativeVideoCanPlay(url)) {
-    videoPlayer.src = url;
-    videoPlayer.load();
-    videoPlayer.style.display = "block";
-    unlockBtn.style.display = "block";
-    setConversionUI(false);
-    setStatus("MKV به‌صورت مستقیم در مرورگر در حال بارگذاری است…", "working");
-    return;
-  }
-
-  // Chrome Android normally lands here.
-  videoPlayer.removeAttribute("src");
-  videoPlayer.load();
-  videoPlayer.style.display = "none";
-  unlockBtn.style.display = "none";
-  setConversionUI(true, false);
-  setStatus("این مرورگر MKV را مستقیم پخش نمی‌کند. روی «تبدیل MKV به MP4» بزن.", "working");
-}
-
-/* ---------- Join room & synchronization ---------- */
 function joinRoom(roomId) {
-  // Prevent duplicate listeners if the user returns to the player.
-  if (roomRef && roomValueHandler) roomRef.off("value", roomValueHandler);
+  const roomRef = db.ref("rooms/" + roomId);
 
-  currentRoomId = roomId;
-  roomRef = db.ref("rooms/" + roomId);
-  hasLoadedVideoSrc = false;
-
-  roomValueHandler = async (snapshot) => {
+  roomRef.on("value", (snapshot) => {
     const data = snapshot.val();
     if (!data) {
-      setStatus("این Room پیدا نشد 😢", "error");
+      statusText.textContent = "این Room پیدا نشد 😢";
       return;
     }
 
-    roomData = data;
-
+    // بار اول: لینک ویدیو رو ست کن
     if (!hasLoadedVideoSrc) {
+      videoPlayer.src = data.videoUrl;
       hasLoadedVideoSrc = true;
-      await prepareVideo(data.videoUrl);
-      if (data.subtitleUrl) setSubtitleTrack(data.subtitleUrl);
+      if (data.subtitleUrl) {
+        setSubtitleTrack(data.subtitleUrl);
+      }
     }
 
     isRemoteChange = true;
 
-    if (videoPlayer.readyState >= 1 && Math.abs(videoPlayer.currentTime - data.currentTime) > 1.5) {
-      try { videoPlayer.currentTime = data.currentTime || 0; } catch {}
+    // همگام‌سازی زمان (اگر اختلاف بیشتر از ۱.۵ ثانیه بود)
+    if (Math.abs(videoPlayer.currentTime - data.currentTime) > 1.5) {
+      videoPlayer.currentTime = data.currentTime;
     }
 
+    // همگام‌سازی play / pause
     if (data.isPlaying && videoPlayer.paused) {
-      videoPlayer.play()
-        .then(() => setStatus("در حال پخش با هم ❤️", "success"))
-        .catch(() => setStatus("برای شروع پخش، یک‌بار روی دکمه ▶️ بزن", "working"));
+      videoPlayer
+        .play()
+        .then(() => {
+          statusText.textContent = "در حال پخش با هم ❤️";
+        })
+        .catch(() => {
+          statusText.textContent = "برای پخش، یک‌بار روی ویدیو بزن ▶️";
+        });
     } else if (!data.isPlaying && !videoPlayer.paused) {
       videoPlayer.pause();
-      setStatus("فیلم متوقف شده ⏸️");
-    } else if (!data.isPlaying) {
-      setStatus("متصل شد؛ منتظر پارتنرت... 💌");
+      statusText.textContent = "فیلم متوقف شده ⏸️";
     }
 
-    setTimeout(() => { isRemoteChange = false; }, 350);
-  };
-
-  roomRef.on("value", roomValueHandler);
-
-  // Attach local listeners only once.
-  if (!videoPlayer.dataset.syncListenersAttached) {
-    videoPlayer.dataset.syncListenersAttached = "true";
-
-    videoPlayer.addEventListener("play", () => {
-      if (isRemoteChange || !roomRef) return;
-      roomRef.update({
-        isPlaying: true,
-        currentTime: videoPlayer.currentTime,
-        updatedAt: Date.now(),
-      });
-    });
-
-    videoPlayer.addEventListener("pause", () => {
-      if (isRemoteChange || !roomRef) return;
-      roomRef.update({
-        isPlaying: false,
-        currentTime: videoPlayer.currentTime,
-        updatedAt: Date.now(),
-      });
-    });
-
-    videoPlayer.addEventListener("seeked", () => {
-      if (isRemoteChange || !roomRef) return;
-      roomRef.update({
-        currentTime: videoPlayer.currentTime,
-        updatedAt: Date.now(),
-      });
-    });
-
-    videoPlayer.addEventListener("loadedmetadata", () => {
-      if (roomData && Math.abs(videoPlayer.currentTime - (roomData.currentTime || 0)) > 1.5) {
-        try { videoPlayer.currentTime = roomData.currentTime || 0; } catch {}
-      }
-    });
-
-    videoPlayer.addEventListener("error", () => {
-      const mediaError = videoPlayer.error;
-      console.error("Video error:", mediaError);
-      if (isMkvUrl(currentSourceUrl) && !currentObjectUrl) {
-        setConversionUI(true, false);
-        setStatus("پخش MKV ناموفق بود؛ برای تبدیل به MP4 دکمه را بزن.", "error");
-      } else {
-        setStatus("ویدیو قابل پخش نیست؛ فرمت یا لینک فایل را بررسی کن.", "error");
-      }
-    });
-  }
-
-  setStatus("متصل شد؛ در حال آماده‌سازی فیلم... 💌");
-}
-
-/* ---------- Periodic sync ---------- */
-setInterval(() => {
-  if (isRemoteChange || !roomRef || videoPlayer.paused) return;
-  if (Math.abs(videoPlayer.currentTime - lastSentTime) < 2) return;
-  lastSentTime = videoPlayer.currentTime;
-  roomRef.update({
-    currentTime: videoPlayer.currentTime,
-    updatedAt: Date.now(),
+    setTimeout(() => {
+      isRemoteChange = false;
+    }, 300);
   });
-}, 3000);
+
+  /* رویدادهای محلی -> ارسال به Firebase */
+
+  videoPlayer.addEventListener("play", () => {
+    if (isRemoteChange) return;
+    roomRef.update({
+      isPlaying: true,
+      currentTime: videoPlayer.currentTime,
+      updatedAt: Date.now(),
+    });
+  });
+
+  videoPlayer.addEventListener("pause", () => {
+    if (isRemoteChange) return;
+    roomRef.update({
+      isPlaying: false,
+      currentTime: videoPlayer.currentTime,
+      updatedAt: Date.now(),
+    });
+  });
+
+  videoPlayer.addEventListener("seeked", () => {
+    if (isRemoteChange) return;
+    roomRef.update({
+      currentTime: videoPlayer.currentTime,
+      updatedAt: Date.now(),
+    });
+  });
+
+  // هر ۳ ثانیه، اگر در حال پخشه، زمان رو برای هماهنگی بیشتر آپدیت کن
+  setInterval(() => {
+    if (isRemoteChange || videoPlayer.paused) return;
+    if (Math.abs(videoPlayer.currentTime - lastSentTime) < 2) return;
+    lastSentTime = videoPlayer.currentTime;
+    roomRef.update({
+      currentTime: videoPlayer.currentTime,
+      updatedAt: Date.now(),
+    });
+  }, 3000);
+
+  statusText.textContent = "متصل شد، منتظر پارتنرت... 💌";
+}
