@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Watch Party ❤️🎬</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- صفحه ۱: خوش‌آمدگویی عاشقانه -->
+  <section id="landing" class="screen active">
+    <div class="floating-hearts">💕</div>
+    <h1>فاطمه جانم، عاشقانه دوستت دارم ❤️</h1>
+    <button id="startBtn" class="btn">بریم فیلم ببینیم 🎬</button>
+  </section>
+
+  <!-- صفحه ۲: وارد کردن لینک فیلم (فقط برای سازنده‌ی روم) -->
+  <section id="setup" class="screen">
+    <h2>لینک فیلم رو وارد کن 🎥</h2>
+    <input type="text" id="videoUrlInput" placeholder="https://example.com/movie.mp4" />
+    <input type="text" id="subtitleUrlInput" placeholder="لینک زیرنویس .vtt (اختیاری)" />
+    <button id="createRoomBtn" class="btn">ساخت Room و شروع 💫</button>
+    <p class="hint">MP4 و MKV پشتیبانی می‌شوند. برای MKV ممکن است تبدیل داخل مرورگر انجام شود.</p>
+  </section>
+
+  <!-- صفحه ۳: نمایش لینک دعوت -->
+  <section id="inviteBox" class="screen">
+    <h2>Room ساخته شد! 💌</h2>
+    <p>این لینک رو برای عشقت بفرست تا با هم فیلم ببینید:</p>
+    <div class="invite-link-box">
+      <input type="text" id="inviteLinkInput" readonly />
+      <button id="copyBtn" class="btn small">کپی 📋</button>
+    </div>
+    <button id="goToPlayerBtn" class="btn">ورود به تماشای فیلم ▶️</button>
+  </section>
+
+  <!-- صفحه ۴: پخش فیلم همزمان -->
+  <section id="player" class="screen">
+    <h2>با هم تماشا کن ❤️</h2>
+    <button id="unlockBtn" class="btn">▶️ برای شروع اینجا بزن</button>
+    <button id="convertMkvBtn" class="btn mkv-btn" style="display:none;">🎬 تبدیل MKV به MP4 و پخش</button>
+    <progress id="conversionProgress" class="conversion-progress" value="0" max="1" style="display:none;"></progress>
+    <video id="videoPlayer" controls playsinline preload="metadata" style="display:none;"></video>
+    <label for="subtitleFileInput" class="btn small subtitle-label">📄 افزودن زیرنویس از گوشی (srt/vtt)</label>
+    <input type="file" id="subtitleFileInput" accept=".srt,.vtt" hidden />
+    <p class="status" id="statusText">در حال اتصال...</p>
+  </section>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <!-- ffmpeg.wasm: used only when the browser cannot play MKV natively -->
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+  <script>
+    // UMD builds expose FFmpeg under FFmpegWASM and utilities under FFmpegUtil.
+    window.FFmpegClass = window.FFmpegWASM?.FFmpeg || window.FFmpeg;
+  </script>
+  <script src="script.js"></script>
+</body>
+</html>
