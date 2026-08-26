@@ -4,15 +4,16 @@
    If the browser cannot play MKV, ffmpeg.wasm converts the remote
    MKV to a browser-friendly MP4 locally in the browser.
    ============================================================ */
-
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY_HERE",
-  authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://PASTE_YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_PROJECT.appspot.com",
-  messagingSenderId: "PASTE_YOUR_SENDER_ID",
-  appId: "PASTE_YOUR_APP_ID"
+  apiKey: "AIzaSyDLXAuoEF7oJki62MVAWmi6kqEl8yCQ_EE",
+  authDomain: "asal-d127b.firebaseapp.com",
+  databaseURL: "https://asal-d127b-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "asal-d127b",
+  storageBucket: "asal-d127b.firebasestorage.app",
+  messagingSenderId: "683243354000",
+  appId: "1:683243354000:web:367e637ff1e3da70862515",
+  measurementId: "G-2E70TE70BB"
 };
 
 firebase.initializeApp(firebaseConfig);
